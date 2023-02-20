@@ -452,7 +452,7 @@ fn on_enter_buffer(context: &mut CompileContext) {
 fn on_enter_block_quote(context: &mut CompileContext) {
     context.tight_stack.push(false);
     context.line_ending_if_needed();
-    context.push("<blockquote>");
+    context.push("\\begin{{quote}}");
 }
 
 /// Handle [`Enter`][Kind::Enter]:[`CodeIndented`][Name::CodeIndented].
@@ -653,22 +653,22 @@ fn on_enter_list(context: &mut CompileContext) {
 
     // Note: no `>`.
     context.push(if context.events[context.index].name == Name::ListOrdered {
-        "<ol"
+        "\\begin{enumerate}"
     } else {
-        "<ul"
+        "\\begin{itemize}"
     });
     context.list_expect_first_marker = Some(true);
 }
 
 /// Handle [`Enter`][Kind::Enter]:[`ListItemMarker`][Name::ListItemMarker].
 fn on_enter_list_item_marker(context: &mut CompileContext) {
-    if context.list_expect_first_marker.take().unwrap() {
-        context.push(">");
-    }
+    //if context.list_expect_first_marker.take().unwrap() {
+    //    context.push(">");
+    //}
 
     context.line_ending_if_needed();
 
-    context.push("<li>");
+    context.push("\\item ");
     context.list_expect_first_marker = Some(false);
 }
 
@@ -1224,14 +1224,13 @@ fn on_exit_gfm_task_list_item_value_checked(context: &mut CompileContext) {
 
 /// Handle [`Exit`][Kind::Exit]:[`HeadingAtx`][Name::HeadingAtx].
 fn on_exit_heading_atx(context: &mut CompileContext) {
-    let rank = context
+    // Doesn't add "\section{" or other variations if removed
+    let _rank = context
         .heading_atx_rank
         .take()
         .expect("`heading_atx_rank` must be set in headings");
 
-    context.push("</h");
-    context.push(&rank.to_string());
-    context.push(">");
+    context.push("}")
 }
 
 /// Handle [`Exit`][Kind::Exit]:[`HeadingAtxSequence`][Name::HeadingAtxSequence].
@@ -1245,9 +1244,12 @@ fn on_exit_heading_atx_sequence(context: &mut CompileContext) {
         .len();
         context.line_ending_if_needed();
         context.heading_atx_rank = Some(rank);
-        context.push("<h");
-        context.push(&rank.to_string());
-        context.push(">");
+        match rank {
+            1 => context.push("\\section{"),
+            2 => context.push("\\subsection{"),
+            3 => context.push("\\subsubsection{"),
+            _ => context.push("\\subsubsubsection{"),
+        }
     }
 }
 
@@ -1346,9 +1348,9 @@ fn on_exit_list(context: &mut CompileContext) {
     context.tight_stack.pop();
     context.line_ending();
     context.push(if context.events[context.index].name == Name::ListOrdered {
-        "</ol>"
+        "\\end{enumerate}"
     } else {
-        "</ul>"
+        "\\end{itemize}"
     });
 }
 
@@ -1377,8 +1379,6 @@ fn on_exit_list_item(context: &mut CompileContext) {
     if !tight_paragraph && !empty_item {
         context.line_ending_if_needed();
     }
-
-    context.push("</li>");
 }
 
 /// Handle [`Exit`][Kind::Exit]:[`ListItemValue`][Name::ListItemValue].
@@ -1391,9 +1391,9 @@ fn on_exit_list_item_value(context: &mut CompileContext) {
         let value = slice.as_str().parse::<u32>().ok().unwrap();
 
         if value != 1 {
-            context.push(" start=\"");
-            context.push(&value.to_string());
-            context.push("\"");
+            context.push(" \\setcounter{enumi}{");
+            context.push(&(value - 1).to_string());
+            context.push("}");
         }
     }
 }
@@ -1443,7 +1443,7 @@ fn on_exit_media(context: &mut CompileContext) {
         if media.image {
             context.push("<img src=\"");
         } else {
-            context.push("<a href=\"");
+            context.push("\\href{");
         };
 
         let destination = if let Some(index) = definition_index {
@@ -1478,7 +1478,7 @@ fn on_exit_media(context: &mut CompileContext) {
     }
 
     if !is_in_image {
-        context.push("\"");
+        context.push("}");
 
         let title = if let Some(index) = definition_index {
             context.definitions[index].title.clone()
@@ -1495,15 +1495,14 @@ fn on_exit_media(context: &mut CompileContext) {
         if media.image {
             context.push(" /");
         }
-
-        context.push(">");
+        context.push("{")
     }
 
     if !media.image {
         context.push(&label);
 
         if !is_in_image {
-            context.push("</a>");
+            context.push("}");
         }
     }
 }
